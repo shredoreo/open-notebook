@@ -1,0 +1,329 @@
+> 本文由 [简悦 SimpRead](http://ksria.com/simpread/) 转码， 原文地址 [www.cnblogs.com](https://www.cnblogs.com/ivictor/p/5735580.html)
+
+从 MySQL5.5 开始，MySQL 以插件的形式支持半同步复制。如何理解半同步呢？首先我们来看看异步，全同步的概念
+
+**异步复制（Asynchronous replication）**
+
+MySQL 默认的复制即是异步的，主库在执行完客户端提交的事务后会立即将结果返给给客户端，并不关心从库是否已经接收并处理，这样就会有一个问题，主如果 crash 掉了，此时主上已经提交的事务可能并没有传到从上，如果此时，强行将从提升为主，可能导致新主上的数据不完整。
+
+**全同步复制（Fully synchronous replication）**
+
+指当主库执行完一个事务，所有的从库都执行了该事务才返回给客户端。因为需要等待所有从库执行完该事务才能返回，所以全同步复制的性能必然会收到严重的影响。
+
+**半同步复制（Semisynchronous replication）**
+
+介于异步复制和全同步复制之间，主库在执行完客户端提交的事务后不是立刻返回给客户端，而是等待至少一个从库接收到并写到 relay log 中才返回给客户端。相对于异步复制，半同步复制提高了数据的安全性，同时它也造成了一定程度的延迟，这个延迟最少是一个 TCP/IP 往返的时间。所以，半同步复制最好在低延时的网络中使用。
+
+下面来看看半同步复制的原理图：
+
+ ![](https://images2015.cnblogs.com/blog/576154/201608/576154-20160804163916122-156935432.jpg)
+
+**半同步复制的潜在问题**
+
+客户端事务在存储引擎层提交后，在得到从库确认的过程中，主库宕机了，此时，可能的情况有两种
+
+**事务还没发送到从库上**
+
+此时，客户端会收到事务提交失败的信息，客户端会重新提交该事务到新的主上，当宕机的主库重新启动后，以从库的身份重新加入到该主从结构中，会发现，该事务在从库中被提交了两次，一次是之前作为主的时候，一次是被新主同步过来的。
+
+**事务已经发送到从库上**
+
+此时，从库已经收到并应用了该事务，但是客户端仍然会收到事务提交失败的信息，重新提交该事务到新的主上。
+
+**无数据丢失的半同步复制**
+
+针对上述潜在问题，MySQL 5.7 引入了一种新的半同步方案：Loss-Less 半同步复制。
+
+针对上面这个图，“Waiting Slave dump”被调整到 “Storage Commit” 之前。
+
+当然，之前的半同步方案同样支持，MySQL 5.7.2 引入了一个新的参数进行控制 - rpl_semi_sync_master_wait_point
+
+rpl_semi_sync_master_wait_point 有两种取值
+
+**AFTER_SYNC**
+
+这个即新的半同步方案，Waiting Slave dump 在 Storage Commit 之前。
+
+**AFTER_COMMIT**
+
+老的半同步方案，如图所示。
+
+**半同步复制的安装部署**
+
+要想使用半同步复制，必须满足以下几个条件：
+
+1. MySQL 5.5 及以上版本
+
+2. 变量 have_dynamic_loading 为 YES
+
+3. 异步复制已经存在
+
+**首先加载插件**
+
+因用户需执行 INSTALL PLUGIN, SET GLOBAL, STOP SLAVE 和 START SLAVE 操作，所以用户需有 SUPER 权限。
+
+主：
+
+mysql> INSTALL PLUGIN rpl_semi_sync_master SONAME 'semisync_master.so';
+
+从：
+
+mysql> INSTALL PLUGIN rpl_semi_sync_slave SONAME 'semisync_slave.so';
+
+**查看插件是否加载成功**
+
+有两种方式
+
+1. 
+
+mysql> show plugins;
+
+```
+rpl_semi_sync_master       | ACTIVE   | REPLICATION        | semisync_master.so | GPL
+```
+
+2. 
+
+mysql> SELECT PLUGIN_NAME, PLUGIN_STATUS FROM INFORMATION_SCHEMA.PLUGINS  WHERE PLUGIN_NAME LIKE '%semi%';
+
+```
++----------------------+---------------+
+| PLUGIN_NAME          | PLUGIN_STATUS |
++----------------------+---------------+
+| rpl_semi_sync_master | ACTIVE        |
++----------------------+---------------+
+1 row in set (0.00 sec)
+```
+
+**启动半同步复制**
+
+在安装完插件后，半同步复制默认是关闭的，这时需设置参数来开启半同步
+
+主：
+
+mysql> SET GLOBAL rpl_semi_sync_master_enabled = 1;
+
+从：
+
+mysql> SET GLOBAL rpl_semi_sync_slave_enabled = 1;
+
+以上的启动方式是在命令行操作，也可写在配置文件中。
+
+主：
+
+```
+plugin-load=rpl_semi_sync_master=semisync_master.so
+rpl_semi_sync_master_enabled=1
+```
+
+从：
+
+```
+plugin-load=rpl_semi_sync_slave=semisync_slave.so
+rpl_semi_sync_slave_enabled=1
+```
+
+在有的高可用架构下，master 和 slave 需同时启动，以便在切换后能继续使用半同步复制
+
+```
+plugin-load = "rpl_semi_sync_master=semisync_master.so;rpl_semi_sync_slave=semisync_slave.so"
+rpl-semi-sync-master-enabled = 1
+rpl-semi-sync-slave-enabled = 1
+```
+
+**重启从上的 IO 线程**
+
+mysql> STOP SLAVE IO_THREAD;
+
+mysql> START SLAVE IO_THREAD;
+
+如果没有重启，则默认还是异步复制，重启后，slave 会在 master 上注册为半同步复制的 slave 角色。
+
+这时候，主的 error.log 中会打印如下信息：
+
+```
+2016-08-05T10:03:40.104327Z 5 [Note] While initializing dump thread for slave with UUID <ce9aaf22-5af6-11e6-850b-000c2988bad2>, found a zombie dump thread with the same UUID. Master is killing the zombie dump thread(4).
+2016-08-05T10:03:40.111175Z 4 [Note] Stop asynchronous binlog_dump to slave (server_id: 2)
+2016-08-05T10:03:40.119037Z 5 [Note] Start binlog_dump to master_thread_id(5) slave_server(2), pos(mysql-bin.000003, 621)
+2016-08-05T10:03:40.119099Z 5 [Note] Start semi-sync binlog_dump to slave (server_id: 2), pos(mysql-bin.000003, 621)
+```
+
+**查看半同步是否在运行**
+
+主：
+
+mysql> show status like 'Rpl_semi_sync_master_status';
+
+```
++-----------------------------+-------+
+| Variable_name               | Value |
++-----------------------------+-------+
+| Rpl_semi_sync_master_status | ON    |
++-----------------------------+-------+
+1 row in set (0.00 sec)
+```
+
+从：
+
+mysql> show status like 'Rpl_semi_sync_slave_status';
+
+```
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+| Rpl_semi_sync_slave_status | ON    |
++----------------------------+-------+
+1 row in set (0.20 sec)
+```
+
+这两个变量常用来监控主从是否运行在半同步复制模式下。
+
+至此，MySQL 半同步复制搭建完毕~
+
+**事实上，半同步复制并不是严格意义上的半同步复制**
+
+当半同步复制发生超时时（由 rpl_semi_sync_master_timeout 参数控制，单位是毫秒，默认为 10000，即 10s），会暂时关闭半同步复制，转而使用异步复制。当 master dump 线程发送完一个事务的所有事件之后，如果在 rpl_semi_sync_master_timeout 内，收到了从库的响应，则主从又重新恢复为半同步复制。
+
+下面来测试一下
+
+![](https://images2015.cnblogs.com/blog/576154/201608/576154-20160805151130434-530685964.png)
+
+该验证分为三个阶段
+
+1. 在 Slave 执行 stop slave 之前，主的 insert 操作很快就能返回。
+
+2. 在 Slave 执行 stop slave 后，主的 insert 操作需要 10.01s 才返回，而这与 rpl_semi_sync_master_timeout 参数的时间相吻合。
+
+这时，查看两个状态的值，均为 “OFF” 了。
+
+同时，主的 error.log 中打印如下信息：
+
+```
+2016-08-05T11:51:49.855452Z 6 [Warning] Timeout waiting for reply of binlog (file: mysql-bin.000003, pos: 1447), semi-sync up to file mysql-bin.000003, position 1196.
+2016-08-05T11:51:49.855742Z 6 [Note] Semi-sync replication switched OFF.
+```
+
+3. 在 Slave 执行 start slave 后，主的 insert 操作很快就能返回，此时，两个状态的值也变为 “ON” 了。
+
+同时，主的 error.log 中会打印如下信息：
+
+```
+2016-08-05T11:52:40.477098Z 7 [Note] Start binlog_dump to master_thread_id(7) slave_server(2), pos(mysql-bin.000003, 1196)
+2016-08-05T11:52:40.477168Z 7 [Note] Start semi-sync binlog_dump to slave (server_id: 2), pos(mysql-bin.000003, 1196)
+2016-08-05T11:52:40.523475Z 0 [Note] Semi-sync replication switched ON at (mysql-bin.000003, 1447)
+```
+
+**其它变量**
+
+**环境变量**
+
+[![](http://common.cnblogs.com/images/copycode.gif)](javascript:void(0); "复制代码")
+
+```
+mysql> show variables like '%Rpl%';
++-------------------------------------------+------------+
+| Variable_name                             | Value      |
++-------------------------------------------+------------+
+| rpl_semi_sync_master_enabled              | ON         |
+| rpl_semi_sync_master_timeout              | 10000      |
+| rpl_semi_sync_master_trace_level          | 32         |
+| rpl_semi_sync_master_wait_for_slave_count | 1          |
+| rpl_semi_sync_master_wait_no_slave        | ON         |
+| rpl_semi_sync_master_wait_point           | AFTER_SYNC |
+| rpl_stop_slave_timeout                    | 31536000   |
++-------------------------------------------+------------+
+7 rows in set (0.30 sec)
+```
+
+[![](http://common.cnblogs.com/images/copycode.gif)](javascript:void(0); "复制代码")
+
+rpl_semi_sync_master_wait_for_slave_count
+
+MySQL 5.7.3 引入的，该变量设置主需要等待多少个 slave 应答，才能返回给客户端，默认为 1。
+
+rpl_semi_sync_master_wait_no_slave
+
+**ON**
+
+默认值，当状态变量 Rpl_semi_sync_master_clients 中的值小于 rpl_semi_sync_master_wait_for_slave_count 时，Rpl_semi_sync_master_status 依旧显示为 ON。
+
+**OFF**
+
+当状态变量 Rpl_semi_sync_master_clients 中的值于 rpl_semi_sync_master_wait_for_slave_count 时，Rpl_semi_sync_master_status 立即显示为 OFF，即异步复制。
+
+说得直白一点，如果我的架构是 1 主 2 从，2 个从都采用了半同步复制，且设置的是 rpl_semi_sync_master_wait_for_slave_count=2，如果其中一个挂掉了，对于 rpl_semi_sync_master_wait_no_slave 设置为 ON 的情况，此时显示的仍然是半同步复制，如果 rpl_semi_sync_master_wait_no_slave 设置为 OFF，则会立刻变成异步复制。
+
+**状态变量**
+
+[![](http://common.cnblogs.com/images/copycode.gif)](javascript:void(0); "复制代码")
+
+```
+mysql> show status like '%Rpl_semi%';
++--------------------------------------------+-------+
+| Variable_name                              | Value |
++--------------------------------------------+-------+
+| Rpl_semi_sync_master_clients               | 1     |
+| Rpl_semi_sync_master_net_avg_wait_time     | 0     |
+| Rpl_semi_sync_master_net_wait_time         | 0     |
+| Rpl_semi_sync_master_net_waits             | 6     |
+| Rpl_semi_sync_master_no_times              | 1     |
+| Rpl_semi_sync_master_no_tx                 | 1     |
+| Rpl_semi_sync_master_status                | ON    |
+| Rpl_semi_sync_master_timefunc_failures     | 0     |
+| Rpl_semi_sync_master_tx_avg_wait_time      | 1120  |
+| Rpl_semi_sync_master_tx_wait_time          | 4483  |
+| Rpl_semi_sync_master_tx_waits              | 4     |
+| Rpl_semi_sync_master_wait_pos_backtraverse | 0     |
+| Rpl_semi_sync_master_wait_sessions         | 0     |
+| Rpl_semi_sync_master_yes_tx                | 4     |
++--------------------------------------------+-------+
+14 rows in set (0.00 sec)
+```
+
+[![](http://common.cnblogs.com/images/copycode.gif)](javascript:void(0); "复制代码")
+
+上述状态变量中，比较重要的有以下几个
+
+Rpl_semi_sync_master_clients
+
+当前半同步复制从的个数，如果是一主多从的架构，并不包含异步复制从的个数。
+
+Rpl_semi_sync_master_no_tx
+
+The number of commits that were not acknowledged successfully by a slave.
+
+具体到上面的测试中，指的是 insert into test.test values(2) 这个事务。
+
+Rpl_semi_sync_master_yes_tx
+
+The number of commits that were acknowledged successfully by a slave.
+
+具体到上面的测试中，指的是以下四个事务
+
+create database test;
+
+create table test.test(id int);
+
+insert into test.test values(1);
+
+insert into test.test values(3);
+
+**总结**
+
+1. 在一主多从的架构中，如果要开启半同步复制，并不要求所有的从都是半同步复制。
+
+2. MySQL 5.7 极大的提升了半同步复制的性能。
+
+    5.6 版本的半同步复制，dump thread 承担了两份不同且又十分频繁的任务：传送 binlog 给 slave ，还需要等待 slave 反馈信息，而且这两个任务是串行的，dump thread 必须等待 slave 返回之后才会传送下一个 events 事务。dump thread 已然成为整个半同步提高性能的瓶颈。在高并发业务场景下，这样的机制会影响数据库整体的 TPS 。
+
+    5.7 版本的半同步复制中，独立出一个 ack collector thread ，专门用于接收 slave 的反馈信息。这样 master 上有两个线程独立工作，可以同时发送 binlog 到 slave ，和接收 slave 的反馈。
+
+**参考**
+
+1. MariaDB 原理与实现
+
+2. [http://dev.mysql.com/doc/refman/5.7/en/replication-semisync.html](http://dev.mysql.com/doc/refman/5.7/en/replication-semisync.html)
+
+3. [http://sanwen8.cn/p/105GRDe.html](http://sanwen8.cn/p/105GRDe.html)
+
+4. 知数堂《MySQL 5.7 Replication 新特性》分享

@@ -1,0 +1,122 @@
+> 本文由 [简悦 SimpRead](http://ksria.com/simpread/) 转码， 原文地址 [blog.csdn.net](https://blog.csdn.net/longgeqiaojie304/article/details/93972700)
+
+JVM 常用基础参数 - 栈内存 Xss 讲解
+=======================
+
+大厂面试题：
+
+1、JVM 垃圾回收时候如何确定垃圾？是否知道什么是 GC Roots
+
+2、你说你做过 JVM 参数调优和参数配置，请问如何盘点查看 JVM 系统默认值
+
+3、你平时工作中用过的 JVM 常用基本配置参数有哪些？
+
+4、强引用、软引用、弱引用、虚引用费别是什么？
+
+5、请你谈谈对 OOM 的认识
+
+6、GC 垃圾回收算法与垃圾收集器的关系？分别是什么请你谈谈？
+
+7、 怎么查看服务器默认的垃圾回收器是哪一个？
+
+       生产上如何配置垃圾收集器的？
+
+       谈谈你对垃圾收集器的理解？
+
+8、G1 垃圾收集器
+
+9、生产环境服务器变慢，诊断思路和性能评估谈谈？
+
+10、假如生产环境 CPU 占用过高，请谈谈你的分析思路和定位。
+
+11、对于 JDK 自带的监控和性能分析工具用过哪些？一般你怎么用的？
+
+1、JVM 常用参数
+----------
+
+-Xms                                       初始堆内存大小，默认物理内存 64/1
+
+                                                -Xms = -XX:InitialHeapSize
+
+-Xmx                                         最大堆内存，默认物理内存 4/1
+
+                                                 -Xmx = -XX:MaxHeapSize
+
+-Xss                                           栈内存大小
+
+                                                 设置单个线程栈大小，一般默认 512~1024kb。
+
+                                                 单个线程栈大小跟操作系统和 JDK 版本都有关系
+
+                                                 -Xss = -XX:ThreadStackSize
+
+-Xmn                                        年轻代大小
+
+-XX:MetaspaceSize                     元空间大小
+
+                                                    元空间本质跟永久代类似，都是对 JVM 规范中方法区的实现。
+
+                                                    不过元空间与永久代最大的区别在于：元空间并不在虚拟机中，而是使用本机内存。
+
+                                                    因此，元空间大小仅受本地内存限制。
+
+-XX:+PrintGCDetails                   打印 GC 详细日志信息
+
+-XX:SurvivorRatio                       幸存者比例设置
+
+-XX:NewRatio                             新生代比例设置
+
+-XX:MaxTenuringThreshold        进入老年代阈值设置
+
+2、查看 - Xss 初始大小
+---------------
+
+### （1）-XX:ThreadStackSize=0 含义
+
+-XX:ThreadStackSize=0 不是说虚拟机栈大小为 0，0 表示为 jvm 默认值（这个虚拟机栈默认值是根据操作系统和 JDK 版本来的）
+
+![](https://img-blog.csdnimg.cn/20190628101204904.png)
+
+### （2）JDK 个版本 - Xss 默认大小
+
+【1】JDK8 默认 - Xss 大小为：
+
+windows 操作系统：
+
+![](https://img-blog.csdnimg.cn/20190628101220551.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+除 windows 操作系统外：
+
+![](https://img-blog.csdnimg.cn/20190628101229677.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+【2】JDK9 默认 - Xss 大小为：
+
+![](https://img-blog.csdnimg.cn/20190628101309180.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+【3】JDK10 默认 - Xss 大小为：
+
+![](https://img-blog.csdnimg.cn/20190628101344888.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+【4】JDK11 默认 - Xss 大小为：
+
+![](https://img-blog.csdnimg.cn/20190628101355360.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+【5】JDK12 默认 - Xss 大小为：
+
+![](https://img-blog.csdnimg.cn/2019062810140488.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+【6】Java JVM 命令行参数如何在 oracle 官网查找，例如：查找 - Xss 参数
+
+![](https://img-blog.csdnimg.cn/20190628101416981.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+![](https://img-blog.csdnimg.cn/20190628101422987.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+![](https://img-blog.csdnimg.cn/20190628101427631.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+![](https://img-blog.csdnimg.cn/20190628101436303.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+![](https://img-blog.csdnimg.cn/20190628101445703.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+![](https://img-blog.csdnimg.cn/20190628101451709.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)
+
+![](https://img-blog.csdnimg.cn/20190628101457413.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xvbmdnZXFpYW9qaWUzMDQ=,size_16,color_FFFFFF,t_70)

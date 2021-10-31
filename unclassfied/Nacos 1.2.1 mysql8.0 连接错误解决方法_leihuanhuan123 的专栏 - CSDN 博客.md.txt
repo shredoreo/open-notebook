@@ -1,0 +1,36 @@
+> 本文由 [简悦 SimpRead](http://ksria.com/simpread/) 转码， 原文地址 [blog.csdn.net](https://blog.csdn.net/leihuanhuan123/article/details/105405022)
+
+Nacos 1.2.1 mysql8.0 连接错误解决方法
+
+Windows 系统：
+
+Windows 环境用 startup.cmd 启动，但没有把 %BASE_DIR%\plugins\mysql 加入 classpath 路径，导致会使用交替的 mysql 驱动。  
+1. 修改 startup.cmd，添加上 %BASE_DIR%\plugins\mysql 路径就解决了。
+
+![](https://img-blog.csdnimg.cn/20200409104315937.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xlaWh1YW5odWFuMTIz,size_16,color_FFFFFF,t_70)
+
+2. 在 nacos 文件夹穿件 plugins/mysql 文件夹，并拷入 mysql-connector-java-8.0.15.jar 包。
+
+![](https://img-blog.csdnimg.cn/20200409104413982.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xlaWh1YW5odWFuMTIz,size_16,color_FFFFFF,t_70)
+
+3. 启动 startup.cmd。启动成功。
+
+![](https://img-blog.csdnimg.cn/20200409104510220.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xlaWh1YW5odWFuMTIz,size_16,color_FFFFFF,t_70)
+
+**Linux 系统**
+
+1. 查看 startup.sh 文件是否有配置 mysql 插件路径。有的话，直接进入第二步。
+
+没有的话，修改 startup.sh，添加上 %BASE_DIR%\plugins\mysql 路径就解决了。
+
+![](https://img-blog.csdnimg.cn/20200409104710384.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xlaWh1YW5odWFuMTIz,size_16,color_FFFFFF,t_70)
+
+2. 在 nacos 文件夹穿件 plugins/mysql 文件夹，并拷入 mysql-connector-java-8.0.15.jar 包。
+
+![](https://img-blog.csdnimg.cn/20200409104732797.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xlaWh1YW5odWFuMTIz,size_16,color_FFFFFF,t_70)
+
+3. 启动 startup.sh。 启动成功。
+
+![](https://img-blog.csdnimg.cn/20200409104753100.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xlaWh1YW5odWFuMTIz,size_16,color_FFFFFF,t_70)
+
+![](https://img-blog.csdnimg.cn/20200409104812596.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2xlaWh1YW5odWFuMTIz,size_16,color_FFFFFF,t_70)

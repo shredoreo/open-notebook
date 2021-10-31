@@ -1,0 +1,70 @@
+> 本文由 [简悦 SimpRead](http://ksria.com/simpread/) 转码， 原文地址 [blog.csdn.net](https://blog.csdn.net/weixin_43779268/article/details/108277368)
+
+**我们可以利用位运算来取代部分模运算**
+
+**为什么我们要这样做?**
+--------------
+
+> 因为位元算直接操作内存的数据类型，不需要反复转化为十进制，
+
+**如何使用?**
+---------
+
+```
+a % b == a & (b - 1)     如此替换
+```
+
+**可以完全取代 % 的位运算吗?**
+-------------------
+
+> 不能，使用位运算只能在 b 为 **2^n** 时使用
+
+一个简单的测试例子
+
+```
+@Test
+    public void tset1(){
+        long sTime = System.currentTimeMillis();
+        for (int i = 0; i < 1000000000; i++) {
+            int a = 99 % 4;
+        }
+        long eTime = System.currentTimeMillis();
+        System.out.println("传统的%来进行模运算花费的时间为"+(eTime-sTime)+"毫秒");
+
+        long sTime1 = System.currentTimeMillis();
+        for (int i = 0; i < 1000000000; i++) {
+            int a = 99 & (4 -1) ;
+        }
+        long eTime1 = System.currentTimeMillis();
+        System.out.println("利用位元算来进行模运算花费的时间为"+(sTime1-eTime1)+"毫秒");
+
+    }
+```
+
+![](https://img-blog.csdnimg.cn/2020082812330568.png#pic_center)  
+**ps：可以看出它们的效率是相差巨大的，位运算不到一毫秒，而 % 的方法花费了 15 毫秒**
+
+原理：
+---
+
+**举个栗子:**
+
+**X % 2^n = X & (2^n - 1)**
+
+假设 n 为 3，则 2^3 = 8，表示成 2 进制就是 1000。2^3 - 1 = 7 ，即 0111。
+
+此时 X & (2^3 - 1) 就相当于取 X 的 2 进制的最后三位数。
+
+而 X / 8 相当于 X >> 3，即把 X 右移 3 位，此时得到了 X / 8 的商，而被移掉的部分 (后三位)，则是 X % 8 的结果，也就是余数。
+
+**推广到一般：**
+
+对于所有 2^n 的数，二进制表示为：
+
+1000…000，1 后面跟 n 个 0
+
+而 2^n - 1 的二进制为：
+
+0111…111，0 后面跟 n 个 1
+
+X / 2^n 是 X >> n，那么 X & (2^n - 1) 就是取被移掉的后 n 位，也就是 X % 2^n。

@@ -1,0 +1,78 @@
+> 本文由 [简悦 SimpRead](http://ksria.com/simpread/) 转码， 原文地址 [blog.csdn.net](https://blog.csdn.net/m0_45025658/article/details/111039046)
+
+它们是 LockSupport 类中的方法
+
+```
+//暂停当线程
+LockSupport.park();
+
+//恢复某个线程的运行
+LockSupport.unpark(暂停线程对象)
+```
+
+```
+public class ParkAndUnpark {
+    public static void main(String[] args) throws InterruptedException {
+        Thread t1 = new Thread(() -> {
+            System.out.println("t1 start");
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println("park");
+            System.out.println("暂停执行");
+            LockSupport.park();
+            System.out.println("恢复执行");
+        });
+        t1.start();
+
+        Thread.sleep(2 * 1000);
+        System.out.println("unpark");
+        LockSupport.unpark(t1);
+    }
+}
+```
+
+![](https://img-blog.csdnimg.cn/20201211155233524.png)
+
+当主线程先 unpark 时，子线程 park 时会自动 unpark
+
+```
+public class ParkAndUnpark {
+    public static void main(String[] args) throws InterruptedException {
+        Thread t1 = new Thread(() -> {
+            System.out.println("t1 start");
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println("park");
+            System.out.println("暂停执行");
+            LockSupport.park();
+            System.out.println("恢复执行");
+        });
+        t1.start();
+
+        Thread.sleep(1 * 1000);
+        System.out.println("unpark");
+        LockSupport.unpark(t1);
+    }
+}
+```
+
+![](https://img-blog.csdnimg.cn/20201211155242318.png)
+
+> **特点**
+> 
+> 和 Object 的 wait & notify 相比：
+> 
+> *   wait，notify 和 notifyAll 必须配合 Object Monitor 一起使用，而 park，unpark 不必
+>     
+> *   park & unpark 是以线程为单位来【阻塞】和【唤醒】线程，而 notify 只能水机唤醒一个等待线程，
+>     
+>     notifyAll 是唤醒所有等待线程，就不那么【精准】
+>     
+> *   park & unpark 可以先 unpark，而 wait & notify 不能先 notify
+>

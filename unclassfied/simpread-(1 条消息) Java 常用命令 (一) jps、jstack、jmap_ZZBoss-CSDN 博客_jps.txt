@@ -1,0 +1,172 @@
+> 本文由 [简悦 SimpRead](http://ksria.com/simpread/) 转码， 原文地址 [blog.csdn.net](https://blog.csdn.net/qq_38071004/article/details/81004765)
+
+一、jps
+-----
+
+jps 由 jdk1.5 提供，用于查看当前用户下的 java 进程的 pid 及基本信息
+
+### 1、jps -help
+
+jps 的帮助命令，可用`jps -h`代替：  
+![](https://img-blog.csdn.net/20180711143416425?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+
+### 2、jps -m
+
+查看进程 pid 及 main 方法参数：  
+![](https://img-blog.csdn.net/20180711143659490?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+图中 5940 是我的 eclipse 进程；18648 是 jps 进程，他的 main 方法参数就是`-m`；27800 是我启动的 hbuilder 软件；47852 是我运行的测试函数，参数是`zdg`和`HK`
+
+### 3、jps -q
+
+仅显示 pid：  
+![](https://img-blog.csdn.net/20180711144100960?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+
+### 4 、jps -v
+
+查看 pid 及 JVM 参数：  
+![](https://img-blog.csdn.net/20180711144224258?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+
+### 5、 jps -l
+
+查看 pid 及程序所在包名：  
+![](https://img-blog.csdn.net/20180711144335550?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+图中 29852 就是我运行的测试 Java 程序。
+
+二、jstack
+--------
+
+使用 jstack 可查看指定进程（pid）的堆栈信息，用以分析线程情况：  
+**NEW：未启动的。不会出现在 Dump 中。**  
+**RUNNABLE：在虚拟机内执行的。**  
+**BLOCKED：受阻塞并等待监视器锁。**  
+**WATING：无限期等待另一个线程执行特定操作。**  
+**TIMED_WATING：有时限的等待另一个线程的特定操作。**  
+**TERMINATED：已退出的。**
+
+### 1、jstack -h
+
+帮助命令：  
+![](https://img-blog.csdn.net/20180711150208577?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+
+### 2、jstack [-l][-m][-F] pid
+
+`-l`：长列表，打印锁的附加信息；  
+`-m`：打印 java 和 native c/c++ 框架的所有栈信息；  
+`-F`：没有响应的时候强制打印栈信息；
+
+### 3、例
+
+首先通过 jps 查看进程 pid：  
+![](https://img-blog.csdn.net/20180711154720851?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+然后通过 jstack 55872 打印堆栈信息：  
+![](https://img-blog.csdn.net/20180711154925180?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+图中仅是一部分信息截图，可以看到当前主线程状态是`TIMED_WATING`，在程序第 6 行：  
+![](https://img-blog.csdn.net/20180711155132629?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+
+### 4、线程死锁查看：
+
+程序：
+
+```
+public class JpsTest {
+    public static void main(String[] args) throws InterruptedException {
+        //创建资源
+        final Object a = new Object();
+        final Object b = new Object();
+        //启动线程
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                //获取a的锁
+                synchronized (a) {
+                    try {
+                        System.out.println("i'm t1");
+                        //等待一会儿，确保下一个线程获得另一个资源对象锁
+                        Thread.sleep(100);
+                        //获取b的锁
+                        synchronized (b) {
+                            System.out.println("t1------");
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }).start();
+        //启动线程
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                //获取b的锁
+                synchronized (b) {
+                    try {
+                        System.out.println("i'm t2");
+                        //等待一会儿，确保下一个线程获得另一个资源对象锁
+                        Thread.sleep(100);
+                        //获取a的锁
+                        synchronized (a) {
+                            System.out.println("t2------");
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }).start();
+    }
+}
+```
+
+程序中两个线程分别持有对方所需资源的锁并等待对方释放导致死锁。  
+查看 jstack 打印信息：  
+![](https://img-blog.csdn.net/2018071116083136?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+可以看到图中第一行显示发现了线程死锁，Thread-1 等待资源 **- waiting to lock <0x00000000eb4c0bf8> (a java.lang.Object)**，且锁住了资源 **- locked <0x00000000eb4c0c08> (a java.lang.Object)**，Thread2 则与之相反。
+
+### 3、jmap 与 jhat
+
+查看堆内存使用情况：  
+**jmap -heap pid**：通过可查看堆内存的配置情况及使用情况  
+**jmap -histo pid**: 统计对象的创建数量  
+**jmap -dump:format=b,file=heapDump pid**：生成 dump 文件与 jhat 配合使用  
+**jhat -port xxxx heapDump**：浏览器访问 localhost:xxxx 即可查看 dump  
+**例：**  
+程序（程序简陋，忽略细节）：
+
+```
+public class JmapTest {
+    public static void main(String[] args) throws InterruptedException {
+        JmapTest test = new JmapTest(300);
+        fun(test);
+        System.out.println(test.a);
+    }
+
+    private JmapTest next;
+    private Integer a;
+    public JmapTest(int a) {
+        this.a = a;
+    }
+    //通过向一个链表递归添加对象
+    public static void fun(JmapTest m) throws InterruptedException {
+        System.out.println(m.a);
+        m.next = new JmapTest(++m.a);
+        //避免过早发送内存溢出
+        Thread.sleep(1000);
+        fun(m.next);
+    }
+}
+```
+
+首先通过使用 **jps -l** 获得 pid，再通过 **jmap -heap pid** 查看堆内存配置及使用情况：  
+配置信息：  
+![](https://img-blog.csdn.net/20180711170958346?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+使用情况：  
+![](https://img-blog.csdn.net/20180711171053379?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+接下来通过 **jmap -histo pid** 查看对象创建数量：  
+![](https://img-blog.csdn.net/20180711171414502?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+图中我们得程序已经创建了 401 个实例对象了。  
+通过 **jmap -dump:format=b,file=heapDump pid** 生成 heapDump 文件：  
+![](https://img-blog.csdn.net/20180711171651778?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+这样文件已经创建成功，再通过 jhat -port xxxx heapDump 启动一个监听程序查看文件：  
+![](https://img-blog.csdn.net/20180711171844805?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)  
+程序已经启动，接下来在浏览器查看：  
+![](https://img-blog.csdn.net/2018071117201417?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM4MDcxMDA0/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)

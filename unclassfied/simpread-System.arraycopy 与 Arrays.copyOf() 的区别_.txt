@@ -1,0 +1,62 @@
+> 本文由 [简悦 SimpRead](http://ksria.com/simpread/) 转码， 原文地址 [blog.csdn.net](https://blog.csdn.net/sspudding/article/details/87878518)
+
+System.arraycopy
+----------------
+
+System.arraycopy 是 System 类提供的一个静态方法
+
+源码
+
+```
+public static native void arraycopy(Object src,  int  srcPos,
+                                          Object dest, int destPos,int length);
+//可以看出它是一个本地方法，所以效率比较高
+```
+
+*   src: 源数组
+*   srcPos: 源数组要复制起始的位置
+*   dest：目的数组
+*   destPos: 目的数组放置的起始位置
+*   length：源数组复制的长度  
+    **src 和 dest 必须是同类型或者可以进行转换类型的数组**
+
+Arrays.copyOf()
+---------------
+
+源码
+
+```
+public static <T> T[] copyOf(T[] original, int newLength) {
+        return (T[]) copyOf(original, newLength, original.getClass());
+    }
+public static <T,U> T[] copyOf(U[] original, int newLength, Class<? extends T[]> newType) {
+        @SuppressWarnings("unchecked")
+        T[] copy = ((Object)newType == (Object)Object[].class)
+            ? (T[]) new Object[newLength]
+            : (T[]) Array.newInstance(newType.getComponentType(), newLength);
+        System.arraycopy(original, 0, copy, 0,
+                         Math.min(original.length, newLength));
+        return copy;
+    }
+//底层调用的是System.arraycopy
+```
+
+*   T[] original ：原始数组
+*   int newLength：新的数组长度
+*   Arrays 类的方法
+
+联系与区别
+-----
+
+**从两种拷贝方式的定义来看：**
+
+*   System.arraycopy() 使用时必须有原数组和目标数组
+*   Arrays.copyOf() 使用时只需要有原数组即可。
+
+**从两种拷贝方式的底层实现来看：**
+
+*   System.arraycopy() 是底层方法
+*   Arrays.copyOf() 是在方法中重新创建了一个数组，并调用 System.arraycopy() 进行拷贝。
+
+**两种拷贝方式的效率分析：**  
+由于 Arrays.copyOf() 不但创建了新的数组而且最终还是调用 System.arraycopy()，所以 System.arraycopy() 的效率高于 Arrays.copyOf()。
